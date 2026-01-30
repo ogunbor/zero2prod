@@ -10,8 +10,8 @@ async fn health_check() -> HttpResponse {
 
 #[derive(serde::Deserialize)]
 pub struct FormData {
-email: String,
-name: String,
+    email: String,
+    name: String,
 }
 
 async fn subscribe(_form: web::Form<FormData>) -> HttpResponse {
