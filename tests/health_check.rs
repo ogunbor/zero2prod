@@ -1,13 +1,9 @@
 //! tests/health_check.rs
 
+use sqlx::{Connection, PgConnection};
 use std::net::TcpListener;
+use zero2prod::configuration::get_configuration;
 
-
-/// `tokio::test` is the testing equivalent of `tokio::main`.
-/// It also spares you from having to specify the `#[test]` attribute.
-///
-/// You can inspect what code gets generated using
-/// `cargo expand --test health_check` (<- name of the test file)
 #[tokio::test]
 async fn health_check_works() {
     // Arrange
@@ -30,7 +26,18 @@ async fn health_check_works() {
 async fn subscribe_returns_a_200_for_valid_form_data() {
     // Arrange
     let app_address = spawn_app();
+    let configuration = get_configuration().expect("Failed to read configuration");
+    let connection_string = configuration.database.connection_string();
+    
+    // The `Connection` trait MUST be in scope for us to invoke
+    // `PgConnection::connect` - it is not an inherent method of the struct!
+    // IMPORTANT: Mark connection as mutable!
+    let mut connection = PgConnection::connect(&connection_string)
+        .await
+        .expect("Failed to connect to Postgres.");
+    
     let client = reqwest::Client::new();
+    
     // Act
     let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
     let response = client
@@ -40,8 +47,18 @@ async fn subscribe_returns_a_200_for_valid_form_data() {
         .send()
         .await
         .expect("Failed to execute request.");
+    
     // Assert
     assert_eq!(200, response.status().as_u16());
+    
+    // NEW: Query the database to verify the data was actually saved
+    let saved = sqlx::query!("SELECT email, name FROM subscriptions",)
+        .fetch_one(&mut connection)
+        .await
+        .expect("Failed to fetch saved subscription.");
+
+    assert_eq!(saved.email, "ursula_le_guin@gmail.com");
+    assert_eq!(saved.name, "le guin");
 }
 
 #[tokio::test]
@@ -54,6 +71,7 @@ async fn subscribe_returns_a_400_when_data_is_missing() {
         ("email=ursula_le_guin%40gmail.com", "missing the name"),
         ("", "missing both name and email"),
     ];
+    
     for (invalid_body, error_message) in test_cases {
         // Act
         let response = client
@@ -63,6 +81,7 @@ async fn subscribe_returns_a_400_when_data_is_missing() {
             .send()
             .await
             .expect("Failed to execute request.");
+        
         // Assert
         assert_eq!(
             400,
@@ -77,11 +96,10 @@ async fn subscribe_returns_a_400_when_data_is_missing() {
 /// Spawns the app in the background and returns its address
 fn spawn_app() -> String {
     let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
-
     let port = listener.local_addr().unwrap().port();
     let server = zero2prod::startup::run(listener).expect("Failed to bind address");
-
+    
     tokio::spawn(server);
-
+    
     format!("http://127.0.0.1:{}", port)
 }
