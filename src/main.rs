@@ -1,6 +1,5 @@
-//! src/main.rs
 use std::net::TcpListener;
-use zero2prod::run;
+use zero2prod::startup::run;
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     // Bubble up the io::Error if we failed to bind the address
