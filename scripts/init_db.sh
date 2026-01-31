@@ -19,11 +19,16 @@ DB_PORT="${POSTGRES_PORT:=5432}"
 # Allow to skip Docker if a dockerized Postgres database is already running
 if [[ -z "${SKIP_DOCKER}" ]]
 then
+# Remove any existing postgres container on this port
+docker stop $(docker ps -q --filter "ancestor=postgres") 2>/dev/null || true
+docker rm $(docker ps -aq --filter "ancestor=postgres") 2>/dev/null || true
+
 docker run \
 -e POSTGRES_USER=${DB_USER} \
 -e POSTGRES_PASSWORD=${DB_PASSWORD} \
 -e POSTGRES_DB=${DB_NAME} \
 -p "${DB_PORT}":5432 \
+--name postgres_container \
 -d postgres \
 postgres -N 1000
 fi
